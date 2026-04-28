@@ -1,0 +1,30 @@
+{
+  "name": "@kapso/workflows",
+  "version": "0.1.0",
+  "description": "Boring TypeScript graph builder for Kapso workflows",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "IMPLEMENTATION_PLAN.md",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "bun run build && bun test",
+    "test": "bun test"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "typescript": "^6.0.3"
+  }
+}
