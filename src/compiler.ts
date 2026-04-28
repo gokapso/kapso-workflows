@@ -1,3 +1,4 @@
+import { START } from './constants.js';
 import { cloneJsonObject } from './json.js';
 
 import type { StoredEdge, StoredNode } from './internal-types.js';
@@ -10,35 +11,29 @@ import type {
   FlowNode,
   JsonObject,
   JsonValue,
-  Position,
   SendInteractiveNode,
   SendTemplateNode,
   SendTextNode,
   Trigger,
   WaitForResponseNode,
   WorkflowMetadata,
-  WorkflowNode,
 } from './types.js';
 
 export function compileDefinition(
   edges: StoredEdge[],
   nodes: Iterable<StoredNode>,
-  startPosition: Position,
 ): FlowDefinition {
-  const flowNodes: FlowNode[] = [
-    {
-      data: {
-        config: {},
-        node_type: 'start',
-      },
-      id: 'start',
-      position: startPosition,
-      type: 'flow-node',
-    },
-  ];
+  const storedNodes = Array.from(nodes);
+  const startNode = storedNodes.find((node) => node.id === START);
+  const regularNodes = storedNodes.filter((node) => node.id !== START);
+  const flowNodes: FlowNode[] = [];
+
+  if (startNode) {
+    flowNodes.push(compileNode(startNode, 0));
+  }
 
   let index = 1;
-  for (const stored of nodes) {
+  for (const stored of regularNodes) {
     flowNodes.push(compileNode(stored, index));
     index += 1;
   }
@@ -91,11 +86,15 @@ function compileNode(stored: StoredNode, index: number): FlowNode {
   };
 }
 
-function nodeTypeFor(node: WorkflowNode): string {
+function nodeTypeFor(node: StoredNode['node']): string {
+  if (node.type === 'start') {
+    return START;
+  }
+
   return node.type === 'raw' ? node.nodeType : node.type;
 }
 
-function compileConfig(node: WorkflowNode): JsonObject {
+function compileConfig(node: StoredNode['node']): JsonObject {
   switch (node.type) {
     case 'agent':
       return withRawConfig(compileAgentConfig(node), node);
@@ -129,6 +128,8 @@ function compileConfig(node: WorkflowNode): JsonObject {
       }), node);
     case 'raw':
       return node.config ? cloneJsonObject(node.config) : {};
+    case 'start':
+      return {};
     case 'send_interactive':
       return withRawConfig(compileInteractiveConfig(node), node);
     case 'send_template':

@@ -5,7 +5,7 @@ Small TypeScript library for authoring Kapso workflows as code.
 It builds a graph, validates obvious mistakes, and compiles to the same source shape used by `kapso pull` and `kapso push`.
 
 ```ts
-import { Workflow } from "@kapso/workflows";
+import { START, Workflow } from "@kapso/workflows";
 
 const workflow = new Workflow("inbound-support", {
   name: "Inbound Support",
@@ -14,6 +14,10 @@ const workflow = new Workflow("inbound-support", {
 workflow.addTrigger({
   type: "inbound_message",
   phoneNumberId: "15551234567",
+});
+
+workflow.addNode(START, {
+  position: { x: 100, y: 100 },
 });
 
 workflow.addNode("normalize", {
@@ -37,7 +41,7 @@ workflow.addNode("support", {
   workflowSlug: "support-flow",
 });
 
-workflow.addEdge("start", "normalize");
+workflow.addEdge(START, "normalize");
 workflow.addEdge("normalize", "classify");
 workflow.addEdge("classify", "support", { label: "support" });
 

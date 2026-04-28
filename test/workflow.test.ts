@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  START,
   Workflow,
   WorkflowValidationError,
   canonicalJson,
@@ -10,8 +11,8 @@ import {
 import type { FlowDefinition } from '../src/index';
 
 describe('Workflow', () => {
-  it('creates an implicit start node and preserves node and edge order', () => {
-    const workflow = new Workflow('inbound-support', { name: 'Inbound Support' });
+  it('uses an explicit start node and preserves node and edge order', () => {
+    const workflow = workflowWithStart('inbound-support', { name: 'Inbound Support' });
 
     workflow
       .addNode('normalize', {
@@ -24,7 +25,7 @@ describe('Workflow', () => {
       }, {
         position: { x: 10, y: 20 },
       })
-      .addEdge('start', 'normalize')
+      .addEdge(START, 'normalize')
       .addEdge('normalize', 'sendWelcome');
 
     const definition = workflow.toDefinition();
@@ -48,7 +49,7 @@ describe('Workflow', () => {
   });
 
   it('emits source metadata, triggers, and canonical definition JSON', () => {
-    const workflow = new Workflow('inbound-support', {
+    const workflow = workflowWithStart('inbound-support', {
       name: 'Inbound Support',
       status: 'draft',
     });
@@ -61,7 +62,7 @@ describe('Workflow', () => {
         timeoutSeconds: 60,
         type: 'wait_for_response',
       })
-      .addEdge('start', 'wait');
+      .addEdge(START, 'wait');
 
     const sourceFiles = workflow.toSourceFiles();
 
@@ -88,7 +89,7 @@ describe('Workflow', () => {
   });
 
   it('compiles send text, template, and interactive nodes', () => {
-    const workflow = new Workflow('messaging');
+    const workflow = workflowWithStart('messaging');
 
     workflow
       .addNode('text', {
@@ -196,7 +197,7 @@ describe('Workflow', () => {
   });
 
   it('compiles function, decision, and call nodes with slug references', () => {
-    const workflow = new Workflow('router');
+    const workflow = workflowWithStart('router');
 
     workflow
       .addNode('normalize', {
@@ -218,7 +219,7 @@ describe('Workflow', () => {
         type: 'call',
         workflowSlug: 'support-flow',
       })
-      .addEdge('start', 'normalize')
+      .addEdge(START, 'normalize')
       .addEdge('normalize', 'classify')
       .addEdge('classify', 'support', { label: 'support' });
 
@@ -243,7 +244,7 @@ describe('Workflow', () => {
   });
 
   it('compiles AI decisions and agent function tools', () => {
-    const workflow = new Workflow('agent-flow');
+    const workflow = workflowWithStart('agent-flow');
 
     workflow
       .addNode('decide', {
@@ -331,7 +332,7 @@ describe('Workflow', () => {
   });
 
   it('compiles webhook, pipedream, handoff, set variable, and raw nodes', () => {
-    const workflow = new Workflow('actions');
+    const workflow = workflowWithStart('actions');
 
     workflow
       .addNode('webhook', {
@@ -402,7 +403,7 @@ describe('Workflow', () => {
   });
 
   it('merges rawConfig into typed nodes as an escape hatch', () => {
-    const workflow = new Workflow('raw-config');
+    const workflow = workflowWithStart('raw-config');
 
     workflow.addNode('send', {
       message: 'Hello',
@@ -418,8 +419,8 @@ describe('Workflow', () => {
     });
   });
 
-  it('throws on duplicate nodes and manual start nodes', () => {
-    const workflow = new Workflow('duplicates');
+  it('throws on duplicate nodes and invalid start node config', () => {
+    const workflow = workflowWithStart('duplicates');
     workflow.addNode('one', {
       message: 'Hello',
       type: 'send_text',
@@ -429,14 +430,28 @@ describe('Workflow', () => {
       message: 'Again',
       type: 'send_text',
     })).toThrow('already exists');
-    expect(() => workflow.addNode('start', {
+
+    expect(() => workflow.addNode(START)).toThrow('already exists');
+    expect(() => new Workflow('invalid-start').addNode(START, {
       message: 'Nope',
       type: 'send_text',
-    })).toThrow('created automatically');
+    } as never)).toThrow('Use workflow.addNode(START, options)');
+  });
+
+  it('rejects workflows without an explicit start node', () => {
+    const workflow = new Workflow('missing-start');
+
+    workflow.addNode('send', {
+      message: 'Hello',
+      type: 'send_text',
+    });
+
+    expect(workflow.validate().errors.map((error) => error.code)).toContain('missing_start_node');
+    expect(() => workflow.toDefinition()).toThrow(WorkflowValidationError);
   });
 
   it('rejects invalid workflow slugs, node ids, and missing edge endpoints', () => {
-    const workflow = new Workflow('Bad Slug');
+    const workflow = workflowWithStart('Bad Slug');
 
     workflow
       .addNode('bad id', {
@@ -456,7 +471,7 @@ describe('Workflow', () => {
   });
 
   it('rejects decision edges without matching condition labels and duplicate conditions', () => {
-    const workflow = new Workflow('decision-errors');
+    const workflow = workflowWithStart('decision-errors');
 
     workflow
       .addNode('classify', {
@@ -480,7 +495,7 @@ describe('Workflow', () => {
   });
 
   it('rejects invalid timeout, webhook method, agent fields, and interactive limits', () => {
-    const workflow = new Workflow('invalid-fields');
+    const workflow = workflowWithStart('invalid-fields');
 
     workflow
       .addNode('wait', {
@@ -533,7 +548,7 @@ describe('Workflow', () => {
   });
 
   it('rejects empty required runtime strings', () => {
-    const workflow = new Workflow('empty-fields');
+    const workflow = workflowWithStart('empty-fields');
 
     workflow
       .addTrigger({ event: '', type: 'whatsapp_event' })
@@ -579,7 +594,7 @@ describe('Workflow', () => {
   });
 
   it('warns about runtime footguns without blocking compilation', () => {
-    const workflow = new Workflow('warnings');
+    const workflow = workflowWithStart('warnings');
 
     workflow
       .addNode('fn', {
@@ -614,7 +629,7 @@ describe('Workflow', () => {
   });
 
   it('rejects multiple outgoing next edges from start', () => {
-    const workflow = new Workflow('bad-start');
+    const workflow = workflowWithStart('bad-start');
 
     workflow
       .addNode('one', {
@@ -625,8 +640,8 @@ describe('Workflow', () => {
         message: 'Two',
         type: 'send_text',
       })
-      .addEdge('start', 'one')
-      .addEdge('start', 'two');
+      .addEdge(START, 'one')
+      .addEdge(START, 'two');
 
     expect(workflow.validate().errors.map((error) => error.code)).toContain('multiple_start_edges');
   });
@@ -640,4 +655,8 @@ describe('Workflow', () => {
 
 function configsById(definition: FlowDefinition) {
   return Object.fromEntries(definition.nodes.map((node) => [node.id, node.data.config]));
+}
+
+function workflowWithStart(slug: string, options?: ConstructorParameters<typeof Workflow>[1]) {
+  return new Workflow(slug, options).addNode(START);
 }

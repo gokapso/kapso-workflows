@@ -1,8 +1,8 @@
-import type { NodeOptions, WorkflowNode } from './types.js';
+import type { NodeOptions, StartNode, WorkflowNode } from './types.js';
 
 export type StoredNode = {
   id: string;
-  node: WorkflowNode;
+  node: StartNode | WorkflowNode;
   options: NodeOptions;
 };
 

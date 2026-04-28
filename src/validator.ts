@@ -1,6 +1,7 @@
 import {
   CLEAN_NODE_ID_PATTERN,
   DEFAULT_AGENT_TOOL_SET,
+  START,
   VALID_REASONING_EFFORTS,
   VALID_WEBHOOK_METHODS,
 } from './constants.js';
@@ -14,7 +15,6 @@ import type {
   Trigger,
   ValidationIssue,
   ValidationResult,
-  WorkflowNode,
 } from './types.js';
 
 type WorkflowValidationInput = {
@@ -32,6 +32,10 @@ export function validateWorkflow(input: WorkflowValidationInput): ValidationResu
 
   if (!isCleanSlug(input.slug)) {
     errors.push(issue('invalid_slug', `Workflow slug "${input.slug}" must be lowercase kebab-case.`, 'slug'));
+  }
+
+  if (!nodesById.has(START)) {
+    errors.push(issue('missing_start_node', 'Workflow must include workflow.addNode(START).', `nodes.${START}`));
   }
 
   for (const stored of nodes) {
@@ -60,7 +64,7 @@ export function validateWorkflow(input: WorkflowValidationInput): ValidationResu
 }
 
 function hasNode(nodesById: Map<string, StoredNode>, id: string): boolean {
-  return id === 'start' || nodesById.has(id);
+  return nodesById.has(id);
 }
 
 function validateDecisionEdges(nodes: StoredNode[], edges: StoredEdge[], errors: ValidationIssue[]): void {
@@ -98,14 +102,14 @@ function validateOutgoingEdges(
     edgesBySource.set(edge.source, sourceEdges);
   }
 
-  const startNextEdges = (edgesBySource.get('start') ?? []).filter((edge) => edge.label === 'next');
+  const startNextEdges = (edgesBySource.get(START) ?? []).filter((edge) => edge.label === 'next');
   if (startNextEdges.length > 1) {
     errors.push(issue('multiple_start_edges', 'The start node can only have one outgoing "next" edge.', 'edges'));
   }
 
   for (const [nodeId, nodeEdges] of edgesBySource) {
     const stored = nodesById.get(nodeId);
-    const nodeType = stored?.node.type ?? 'start';
+    const nodeType = stored?.node.type ?? 'unknown';
 
     if (nodeType === 'decide') {
       continue;
@@ -157,7 +161,7 @@ function validateNodeId(id: string, errors: ValidationIssue[]): void {
   }
 }
 
-function validateNode(id: string, node: WorkflowNode, errors: ValidationIssue[]): void {
+function validateNode(id: string, node: StoredNode['node'], errors: ValidationIssue[]): void {
   switch (node.type) {
     case 'agent':
       validateAgentNode(id, node, errors);
@@ -189,6 +193,8 @@ function validateNode(id: string, node: WorkflowNode, errors: ValidationIssue[])
       return;
     case 'set_variable':
       validateNonEmpty(id, 'variableName', node.variableName, errors);
+      return;
+    case 'start':
       return;
     case 'wait_for_response':
       if (node.timeoutSeconds !== undefined && node.timeoutSeconds <= 0) {

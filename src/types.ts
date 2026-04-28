@@ -11,12 +11,19 @@ export type Position = {
 
 export type WorkflowOptions = {
   name?: string;
-  startPosition?: Position;
   status?: WorkflowStatus;
 };
 
 export type NodeOptions = {
   displayName?: string;
+  position?: Position;
+};
+
+export type StartNode = {
+  type: 'start';
+};
+
+export type StartNodeOptions = {
   position?: Position;
 };
 

@@ -2,7 +2,7 @@ export {
   Workflow,
   WorkflowValidationError,
 } from './workflow.js';
-export { DEFAULT_AGENT_TOOLS } from './constants.js';
+export { DEFAULT_AGENT_TOOLS, START } from './constants.js';
 export { canonicalJson } from './json.js';
 export { isCleanSlug, normalizeSlug } from './slug.js';
 
@@ -25,6 +25,8 @@ export type {
   SendTextNode,
   SetVariableNode,
   SourceFiles,
+  StartNode,
+  StartNodeOptions,
   Trigger,
   ValidationIssue,
   ValidationResult,

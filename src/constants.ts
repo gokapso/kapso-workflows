@@ -1,5 +1,6 @@
 export const CLEAN_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const CLEAN_NODE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
+export const START = 'start' as const;
 export const VALID_WEBHOOK_METHODS = new Set(['DELETE', 'GET', 'PATCH', 'POST', 'PUT']);
 export const VALID_REASONING_EFFORTS = new Set(['high', 'low', 'medium', 'minimal']);
 
