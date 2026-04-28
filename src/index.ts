@@ -1,11 +1,10 @@
 export {
-  DEFAULT_AGENT_TOOLS,
   Workflow,
   WorkflowValidationError,
-  canonicalJson,
-  isCleanSlug,
-  normalizeSlug,
 } from './workflow.js';
+export { DEFAULT_AGENT_TOOLS } from './constants.js';
+export { canonicalJson } from './json.js';
+export { isCleanSlug, normalizeSlug } from './slug.js';
 
 export type {
   AgentNode,

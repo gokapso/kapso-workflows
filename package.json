@@ -13,7 +13,6 @@
   },
   "files": [
     "dist",
-    "IMPLEMENTATION_PLAN.md",
     "README.md"
   ],
   "sideEffects": false,
