@@ -64,6 +64,12 @@ export function compileTrigger(trigger: Trigger): WorkflowMetadata['triggers'][n
         phoneNumberId: trigger.phoneNumberId,
         triggerType: 'whatsapp_event',
       }) as WorkflowMetadata['triggers'][number];
+    case 'project_event':
+      return {
+        active: trigger.active ?? true,
+        triggerableAttributes: definedObject(trigger.triggerableAttributes),
+        triggerType: 'project_event',
+      } as WorkflowMetadata['triggers'][number];
   }
 }
 
@@ -105,6 +111,12 @@ function compileConfig(node: StoredNode['node']): JsonObject {
       }), node);
     case 'decide':
       return withRawConfig(compileDecisionConfig(node), node);
+    case 'emit_event':
+      return withRawConfig(definedObject({
+        event_name: node.eventName,
+        occurred_at: node.occurredAt,
+        properties: node.properties,
+      }), node);
     case 'function':
       return withRawConfig(definedObject({
         function_slug: node.functionSlug,

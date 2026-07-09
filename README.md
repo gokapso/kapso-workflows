@@ -48,6 +48,29 @@ workflow.addEdge("classify", "support", { label: "support" });
 const { metadata, definition, definitionJson } = workflow.toSourceFiles();
 ```
 
+Project Event triggers and `emit_event` nodes are first-class:
+
+```ts
+workflow.addTrigger({
+  type: "project_event",
+  triggerableAttributes: {
+    event_name: "conversation.csat_scored",
+    property_key: "score",
+    operator: "gte",
+    property_value: 4,
+  },
+});
+
+workflow.addNode("recordScore", {
+  type: "emit_event",
+  eventName: "conversation.csat_scored",
+  properties: {
+    score: "{{vars.score}}",
+    source: "workflow",
+  },
+});
+```
+
 ## Commands
 
 ```sh

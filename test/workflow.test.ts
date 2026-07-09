@@ -88,6 +88,62 @@ describe('Workflow', () => {
     expect(sourceFiles.definitionJson).toContain('"node_type": "wait_for_response"');
   });
 
+  it('compiles Project Event triggers and emit_event nodes', () => {
+    const workflow = workflowWithStart('project-events');
+
+    workflow
+      .addTrigger({
+        active: true,
+        triggerableAttributes: {
+          event_name: 'conversation.csat_scored',
+          operator: 'gte',
+          property_key: 'score',
+          property_value: 4,
+        },
+        type: 'project_event',
+      })
+      .addNode('recordScore', {
+        eventName: 'conversation.csat_scored',
+        occurredAt: '{{vars.scored_at}}',
+        properties: {
+          resolved: true,
+          score: '{{vars.score}}',
+          source: 'workflow',
+        },
+        type: 'emit_event',
+      })
+      .addEdge(START, 'recordScore');
+
+    const sourceFiles = workflow.toSourceFiles();
+
+    expect(sourceFiles.metadata.triggers).toEqual([
+      {
+        active: true,
+        triggerableAttributes: {
+          event_name: 'conversation.csat_scored',
+          operator: 'gte',
+          property_key: 'score',
+          property_value: 4,
+        },
+        triggerType: 'project_event',
+      },
+    ]);
+    expect(sourceFiles.definition.nodes.find((node) => node.id === 'recordScore')).toMatchObject({
+      data: {
+        config: {
+          event_name: 'conversation.csat_scored',
+          occurred_at: '{{vars.scored_at}}',
+          properties: {
+            resolved: true,
+            score: '{{vars.score}}',
+            source: 'workflow',
+          },
+        },
+        node_type: 'emit_event',
+      },
+    });
+  });
+
   it('compiles send text, template, and interactive nodes', () => {
     const workflow = workflowWithStart('messaging');
 
@@ -544,6 +600,130 @@ describe('Workflow', () => {
       'too_many_list_rows',
       'list_row_title_too_long',
       'list_row_description_too_long',
+    ]);
+  });
+
+  it('rejects invalid Project Event triggers and emit_event nodes', () => {
+    const workflow = workflowWithStart('bad-project-events');
+
+    workflow
+      .addTrigger({
+        triggerableAttributes: {
+          event_name: 'Bad Event',
+          operator: 'contains' as never,
+          property_key: 'score',
+        },
+        type: 'project_event',
+      })
+      .addNode('recordBadEvent', {
+        eventName: 'conversation.bad-event',
+        properties: {
+          nested: { score: 1 },
+        } as never,
+        type: 'emit_event',
+      });
+
+    expect(workflow.validate().errors.map((error) => error.code)).toEqual([
+      'invalid_project_event_name',
+      'invalid_project_event_property_value',
+      'invalid_project_event_name',
+      'invalid_project_event_operator',
+      'incomplete_project_event_property_filter',
+    ]);
+  });
+
+  it('rejects Project Event filters that would fail backend validation', () => {
+    const workflow = workflowWithStart('bad-project-event-filters');
+
+    workflow
+      .addTrigger({
+        triggerableAttributes: {
+          event_name: 'conversation.csat_scored',
+          operator: 'gte',
+          property_key: 'score',
+          property_value: 'banana',
+        },
+        type: 'project_event',
+      })
+      .addTrigger({
+        triggerableAttributes: {
+          event_name: 'conversation.csat_scored',
+          property_key: 'score',
+          property_value: 4,
+        },
+        type: 'project_event',
+      })
+      .addTrigger({
+        triggerableAttributes: {
+          event_name: 'conversation.csat_scored',
+          operator: 'eq',
+          property_key: 'score',
+          property_value: null,
+        },
+        type: 'project_event',
+      });
+
+    expect(workflow.validate().errors.map((error) => error.code)).toEqual([
+      'invalid_project_event_numeric_property_value',
+      'incomplete_project_event_property_filter',
+      'incomplete_project_event_property_filter',
+    ]);
+  });
+
+  it('rejects emit_event properties that would fail backend validation', () => {
+    const workflow = workflowWithStart('bad-project-event-properties');
+    const oversizedProperties = Object.fromEntries(
+      Array.from({ length: 9 }, (_, index) => [`chunk_${index}`, 'x'.repeat(1000)]),
+    );
+
+    workflow
+      .addNode('tooManyProperties', {
+        eventName: 'conversation.too_many_properties',
+        properties: Object.fromEntries(
+          Array.from({ length: 26 }, (_, index) => [`prop_${index}`, index]),
+        ),
+        type: 'emit_event',
+      })
+      .addNode('badPropertyShapes', {
+        eventName: 'conversation.bad_property_shapes',
+        properties: {
+          ['x'.repeat(65)]: true,
+          infinite_score: Number.POSITIVE_INFINITY,
+          long_note: 'x'.repeat(1025),
+          ...oversizedProperties,
+        },
+        type: 'emit_event',
+      });
+
+    expect(workflow.validate().errors.map((error) => error.code)).toEqual([
+      'too_many_project_event_properties',
+      'project_event_properties_too_large',
+      'project_event_property_key_too_long',
+      'invalid_project_event_property_value',
+      'project_event_property_string_too_large',
+    ]);
+  });
+
+  it('rejects Project Event names longer than the backend limit', () => {
+    const workflow = workflowWithStart('long-project-events');
+    const longEventName = `conversation.${'a'.repeat(117)}`;
+
+    workflow
+      .addTrigger({
+        triggerableAttributes: {
+          event_name: longEventName,
+        },
+        type: 'project_event',
+      })
+      .addNode('recordLongEvent', {
+        eventName: longEventName,
+        type: 'emit_event',
+      });
+
+    expect(longEventName.length).toBe(130);
+    expect(workflow.validate().errors.map((error) => error.code)).toEqual([
+      'invalid_project_event_name',
+      'invalid_project_event_name',
     ]);
   });
 

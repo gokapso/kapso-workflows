@@ -49,7 +49,22 @@ export type WhatsappEventTrigger = {
   type: 'whatsapp_event';
 };
 
-export type Trigger = ApiCallTrigger | InboundMessageTrigger | WhatsappEventTrigger;
+export type ProjectEventTriggerOperator = 'eq' | 'gt' | 'gte' | 'lt' | 'lte';
+
+export type ProjectEventTriggerAttributes = {
+  event_name: string;
+  operator?: ProjectEventTriggerOperator;
+  property_key?: string;
+  property_value?: JsonPrimitive;
+};
+
+export type ProjectEventTrigger = {
+  active?: boolean;
+  triggerableAttributes: ProjectEventTriggerAttributes;
+  type: 'project_event';
+};
+
+export type Trigger = ApiCallTrigger | InboundMessageTrigger | ProjectEventTrigger | WhatsappEventTrigger;
 
 export type BaseNode = {
   rawConfig?: JsonObject;
@@ -182,6 +197,13 @@ export type FunctionNode = BaseNode & {
   type: 'function';
 };
 
+export type EmitEventNode = BaseNode & {
+  eventName: string;
+  occurredAt?: string;
+  properties?: Record<string, JsonPrimitive>;
+  type: 'emit_event';
+};
+
 export type WebhookNode = BaseNode & {
   aiFields?: AiFields;
   bodyTemplate?: JsonObject | JsonValue[];
@@ -271,6 +293,7 @@ export type WorkflowNode =
   | AgentNode
   | CallNode
   | DecideNode
+  | EmitEventNode
   | FunctionNode
   | HandoffNode
   | PipedreamNode
@@ -308,7 +331,8 @@ export type WorkflowMetadataTrigger = {
   active: boolean;
   event?: string;
   phoneNumberId?: string;
-  triggerType: 'api_call' | 'inbound_message' | 'whatsapp_event';
+  triggerableAttributes?: ProjectEventTriggerAttributes;
+  triggerType: 'api_call' | 'inbound_message' | 'project_event' | 'whatsapp_event';
 };
 
 export type WorkflowMetadata = {
