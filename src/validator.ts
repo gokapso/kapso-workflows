@@ -1,7 +1,15 @@
 import {
   CLEAN_NODE_ID_PATTERN,
   DEFAULT_AGENT_TOOL_SET,
+  NUMERIC_PROJECT_EVENT_OPERATORS,
+  PROJECT_EVENT_MAX_PROPERTIES,
+  PROJECT_EVENT_MAX_PROPERTIES_BYTES,
+  PROJECT_EVENT_MAX_PROPERTY_KEY_LENGTH,
+  PROJECT_EVENT_MAX_STRING_VALUE_BYTES,
+  PROJECT_EVENT_NAME_MAX_LENGTH,
+  PROJECT_EVENT_NAME_PATTERN,
   START,
+  VALID_PROJECT_EVENT_OPERATORS,
   VALID_REASONING_EFFORTS,
   VALID_WEBHOOK_METHODS,
 } from './constants.js';
@@ -172,6 +180,10 @@ function validateNode(id: string, node: StoredNode['node'], errors: ValidationIs
     case 'decide':
       validateDecisionNode(id, node, errors);
       return;
+    case 'emit_event':
+      validateProjectEventName('node', id, node.eventName, `nodes.${id}.eventName`, errors);
+      validateProjectEventProperties(id, node.properties, errors);
+      return;
     case 'function':
       validateNonEmpty(id, 'functionSlug', node.functionSlug, errors);
       return;
@@ -320,6 +332,178 @@ function validateTrigger(trigger: Trigger, index: number, errors: ValidationIssu
   if (trigger.type === 'whatsapp_event' && trigger.event.trim().length === 0) {
     errors.push(issue('empty_trigger_event', `Trigger ${index} has an empty event.`, `triggers.${index}.event`));
   }
+
+  if (trigger.type !== 'project_event') {
+    return;
+  }
+
+  const attributes = trigger.triggerableAttributes;
+  validateProjectEventName(
+    'trigger',
+    `Trigger ${index}`,
+    attributes.event_name,
+    `triggers.${index}.triggerableAttributes.event_name`,
+    errors,
+  );
+
+  if (attributes.property_key !== undefined && attributes.property_key.trim().length === 0) {
+    errors.push(issue(
+      'empty_project_event_property_key',
+      `Trigger ${index} project event property_key cannot be empty.`,
+      `triggers.${index}.triggerableAttributes.property_key`,
+    ));
+  }
+
+  if (attributes.operator && !VALID_PROJECT_EVENT_OPERATORS.has(attributes.operator)) {
+    errors.push(issue(
+      'invalid_project_event_operator',
+      `Trigger ${index} project event operator "${attributes.operator}" is not supported.`,
+      `triggers.${index}.triggerableAttributes.operator`,
+    ));
+  }
+
+  const propertyKeyPresent = attributes.property_key !== undefined && attributes.property_key.trim().length > 0;
+  const operatorPresent = attributes.operator !== undefined && attributes.operator.length > 0;
+  const propertyValuePresent = attributes.property_value !== undefined && attributes.property_value !== null;
+  const hasAnyPropertyFilter = propertyKeyPresent || operatorPresent || propertyValuePresent;
+  const hasCompletePropertyFilter = propertyKeyPresent && operatorPresent && propertyValuePresent;
+
+  if (hasAnyPropertyFilter && !hasCompletePropertyFilter) {
+    errors.push(issue(
+      'incomplete_project_event_property_filter',
+      `Trigger ${index} project event property filter must include property_key, operator, and non-null property_value.`,
+      `triggers.${index}.triggerableAttributes`,
+    ));
+  }
+
+  if (
+    hasCompletePropertyFilter &&
+    attributes.operator &&
+    NUMERIC_PROJECT_EVENT_OPERATORS.has(attributes.operator) &&
+    !isNumericProjectEventPropertyValue(attributes.property_value)
+  ) {
+    errors.push(issue(
+      'invalid_project_event_numeric_property_value',
+      `Trigger ${index} project event property_value must be a number for numeric operator "${attributes.operator}".`,
+      `triggers.${index}.triggerableAttributes.property_value`,
+    ));
+  }
+}
+
+function validateProjectEventName(
+  ownerType: 'node' | 'trigger',
+  owner: string,
+  value: string,
+  path: string,
+  errors: ValidationIssue[],
+): void {
+  if (!PROJECT_EVENT_NAME_PATTERN.test(value) || value.length > PROJECT_EVENT_NAME_MAX_LENGTH) {
+    const subject = ownerType === 'node' ? `Node "${owner}" field "eventName"` : `${owner} project event name "${value}"`;
+    errors.push(issue(
+      'invalid_project_event_name',
+      `${subject} must be lowercase dotted snake_case and at most ${PROJECT_EVENT_NAME_MAX_LENGTH} characters.`,
+      path,
+    ));
+  }
+}
+
+function validateProjectEventProperties(
+  id: string,
+  properties: Record<string, unknown> | undefined,
+  errors: ValidationIssue[],
+): void {
+  const entries = Object.entries(properties ?? {});
+
+  if (entries.length > PROJECT_EVENT_MAX_PROPERTIES) {
+    errors.push(issue(
+      'too_many_project_event_properties',
+      `Node "${id}" Project Event properties can include at most ${PROJECT_EVENT_MAX_PROPERTIES} keys.`,
+      `nodes.${id}.properties`,
+    ));
+  }
+
+  if (jsonByteLength(properties ?? {}) > PROJECT_EVENT_MAX_PROPERTIES_BYTES) {
+    errors.push(issue(
+      'project_event_properties_too_large',
+      `Node "${id}" Project Event properties payload must be at most ${PROJECT_EVENT_MAX_PROPERTIES_BYTES} bytes.`,
+      `nodes.${id}.properties`,
+    ));
+  }
+
+  for (const [key, value] of entries) {
+    if (key.trim().length === 0) {
+      errors.push(issue(
+        'empty_project_event_property_key',
+        `Node "${id}" Project Event property key cannot be empty.`,
+        `nodes.${id}.properties`,
+      ));
+    }
+
+    if (key.length > PROJECT_EVENT_MAX_PROPERTY_KEY_LENGTH) {
+      errors.push(issue(
+        'project_event_property_key_too_long',
+        `Node "${id}" Project Event property key "${key}" is longer than ${PROJECT_EVENT_MAX_PROPERTY_KEY_LENGTH} characters.`,
+        `nodes.${id}.properties.${key}`,
+      ));
+    }
+
+    if (!isJsonPrimitive(value) || (typeof value === 'number' && !Number.isFinite(value))) {
+      errors.push(issue(
+        'invalid_project_event_property_value',
+        `Node "${id}" Project Event property "${key}" must be a scalar JSON value.`,
+        `nodes.${id}.properties.${key}`,
+      ));
+    }
+
+    if (typeof value === 'string' && textByteLength(value) > PROJECT_EVENT_MAX_STRING_VALUE_BYTES) {
+      errors.push(issue(
+        'project_event_property_string_too_large',
+        `Node "${id}" Project Event property "${key}" string value must be at most ${PROJECT_EVENT_MAX_STRING_VALUE_BYTES} bytes.`,
+        `nodes.${id}.properties.${key}`,
+      ));
+    }
+  }
+}
+
+function isJsonPrimitive(value: unknown): boolean {
+  return value === null || ['boolean', 'number', 'string'].includes(typeof value);
+}
+
+function jsonByteLength(value: unknown): number {
+  return textByteLength(JSON.stringify(value));
+}
+
+function textByteLength(value: string): number {
+  let bytes = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff) {
+      bytes += 4;
+      index += 1;
+    } else {
+      bytes += 3;
+    }
+  }
+
+  return bytes;
+}
+
+function isNumericProjectEventPropertyValue(value: unknown): boolean {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return false;
+  }
+
+  return Number.isFinite(Number(value));
 }
 
 function validateNonEmpty(
